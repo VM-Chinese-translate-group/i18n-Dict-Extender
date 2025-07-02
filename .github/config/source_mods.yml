@@ -1,0 +1,12 @@
+# 在这里配置需要整合翻译的模组仓库信息
+
+mods:
+  - repo: "Creators-of-Create/Create"
+    # 分支可选，不填则使用仓库的默认分支
+    # branch: "mc1.20.1/dev"
+    # 语言文件所在目录的相对路径
+    lang_path: "src/main/resources/assets/create/lang"
+    modid: "create"
+    # 版本号可选，不填则尝试从分支名中提取 (例如 mc1.20.1/dev -> 1.20)
+    version: "1.20" 
+    curseforge: "create"
