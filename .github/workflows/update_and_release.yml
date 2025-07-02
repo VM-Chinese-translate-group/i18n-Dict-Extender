@@ -35,19 +35,13 @@ jobs:
         run: |
           echo "RELEASE_TAG=dict-update-$(date -u +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
           echo "RELEASE_NAME=自动词典更新 $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_ENV
-          # 使用 heredoc 语法安全地读取多行文件内容
-          echo 'RELEASE_BODY<<EOF' >> $GITHUB_ENV
-          cat release_body.md >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
-          # 使用从文件中读取的 body
-          body: ${{ env.RELEASE_BODY }}
-          # 添加 diff.json 到上传列表
+          body_path: release_body.md
           files: |
             Dict.json
             Dict-Mini.json
