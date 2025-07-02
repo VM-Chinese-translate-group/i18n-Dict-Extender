@@ -3,14 +3,14 @@
 mods:
   - repo: "Creators-of-Create/Create"
     # 分支可选，不填则使用仓库的默认分支
-    branch: "mc1.21.1/dev"
+    # branch: "mc1.21.1/dev"
     # 按此顺序查找语言文件夹，找到即止
     lang_paths:
       - "src/generated/resources/assets/create/lang" # 优先查找生成路径
       - "src/main/resources/assets/create/lang"      # 备用查找源码路径
     modid: "create"
     # 版本号可选，不填则尝试从分支名中提取 (例如 mc1.20.1/dev -> 1.20)
-    version: "1.21" 
+    version: "1.20" 
     curseforge: "create"
 
   # - repo: "some-developer/some-cool-mod"
