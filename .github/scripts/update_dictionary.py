@@ -116,22 +116,37 @@ def process_repo(mod_config, db_cursor):
                 print(f"错误：仓库 {repo_slug} 的配置中缺少 'lang_paths'。跳过此模组。")
                 return
 
-            found_lang_dir = None
+            # --- 关键修改：分别独立查找 en_us.json 和 zh_cn.json ---
+            en_path = None
+            zh_path = None
+
+            print("正在按优先级查找 en_us.json...")
             for relative_path in lang_paths_config:
-                # 所有路径查找都基于找到的仓库根目录
-                potential_dir = repo_root_dir / relative_path
-                if (potential_dir / "en_us.json").exists() and (potential_dir / "zh_cn.json").exists():
-                    print(f"在路径 '{relative_path}' 中找到语言文件。")
-                    found_lang_dir = potential_dir
-                    break
-            
-            if not found_lang_dir:
-                print(f"错误：在所有指定路径 {lang_paths_config} 中均未找到 en_us.json 和 zh_cn.json。跳过此模组。")
+                potential_path = repo_root_dir / relative_path / "en_us.json"
+                if potential_path.exists():
+                    en_path = potential_path
+                    print(f"  -> 在 '{relative_path}' 中找到 en_us.json")
+                    break # 找到第一个就停止
+
+            print("正在按优先级查找 zh_cn.json...")
+            for relative_path in lang_paths_config:
+                potential_path = repo_root_dir / relative_path / "zh_cn.json"
+                if potential_path.exists():
+                    zh_path = potential_path
+                    print(f"  -> 在 '{relative_path}' 中找到 zh_cn.json")
+                    break # 找到第一个就停止
+
+            # 检查是否两个文件都找到了
+            if not en_path or not zh_path:
+                missing_files = []
+                if not en_path: missing_files.append("en_us.json")
+                if not zh_path: missing_files.append("zh_cn.json")
+                print(f"错误：未能找到文件: {', '.join(missing_files)}。在所有指定路径中均未找到。跳过此模组。")
                 return
 
             # 读取和处理语言文件
-            with open(found_lang_dir / "en_us.json", 'r', encoding='utf-8') as f: en_data = json.load(f)
-            with open(found_lang_dir / "zh_cn.json", 'r', encoding='utf-8') as f: zh_data = json.load(f)
+            with open(en_path, 'r', encoding='utf-8') as f: en_data = json.load(f)
+            with open(zh_path, 'r', encoding='utf-8') as f: zh_data = json.load(f)
 
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
