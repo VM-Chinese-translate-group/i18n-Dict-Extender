@@ -12,3 +12,11 @@ mods:
     # 版本号可选，不填则尝试从分支名中提取 (例如 mc1.20.1/dev -> 1.20)
     version: "1.20" 
     curseforge: "create"
+
+  # - repo: "some-developer/some-cool-mod"
+  #   # branch 未填写，将自动获取默认分支
+  #   lang_paths:
+  #     - "src/main/resources/assets/somecoolmod/lang"
+  #   modid: "somecoolmod"
+  #   # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
+  #   curseforge: "some-cool-mod"
