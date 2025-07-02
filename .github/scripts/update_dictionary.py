@@ -180,28 +180,80 @@ def initialize_db(conn):
     print("数据库初始化完成。")
 
 def regenerate_release_files():
-    print("\n--- 开始从数据库重新生成 Release 文件 ---")
+    """
+    从更新后的数据库重新生成 Dict.json 和 Dict-Mini.json。
+    此函数的逻辑严格遵循参考项目的代码，以确保生成的文件内容和格式一致。
+    """
+    print("\n--- 开始从数据库重新生成 Release 文件 (遵循源项目逻辑) ---")
     if not Path(DB_FILENAME).exists():
         print(f"错误：{DB_FILENAME} 不存在，无法生成 JSON 文件。")
         return
+
+    # 1. 从数据库读取所有数据
     conn = sqlite3.connect(DB_FILENAME)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    print(f"正在生成 {JSON_FILENAME}...")
     cursor.execute("SELECT ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE FROM dict")
-    all_entries = [dict(row) for row in cursor.fetchall()]
-    with open(JSON_FILENAME, 'w', encoding='utf-8') as f:
-        json.dump(all_entries, f, ensure_ascii=False, indent=4)
-    print(f"{JSON_FILENAME} 生成完毕。")
-    print(f"正在生成 {MINI_JSON_FILENAME}...")
-    trans_counts = defaultdict(lambda: defaultdict(int))
-    for entry in all_entries:
-        trans_counts[entry['ORIGIN_NAME']][entry['TRANS_NAME']] += 1
-    mini_dict = {origin: sorted(trans_map.keys(), key=lambda t: trans_map[t], reverse=True) for origin, trans_map in trans_counts.items()}
-    with open(MINI_JSON_FILENAME, 'w', encoding='utf-8') as f:
-        json.dump(mini_dict, f, ensure_ascii=False, indent=2)
-    print(f"{MINI_JSON_FILENAME} 生成完毕。")
+    # 将数据库行转换为与源项目 'i' 变量结构一致的字典列表
+    all_db_entries = [{
+        'origin_name': row['ORIGIN_NAME'],
+        'trans_name': row['TRANS_NAME'],
+        'modid': row['MODID'],
+        'key': row['KEY'],
+        'version': row['VERSION'],
+        'curseforge': row['CURSEFORGE']
+    } for row in cursor.fetchall()]
     conn.close()
+
+    # 2. 遵循源项目的逻辑处理数据
+    integral = []
+    integral_mini_temp = defaultdict(list)
+
+    print(f'处理从数据库读取的 {len(all_db_entries)} 个词条中...')
+    for entry in all_db_entries:
+        # 筛选条件1: 原文长度不能超过50
+        if len(entry['origin_name']) > 50:
+            continue
+        # 筛选条件2: 原文不能为空
+        if entry['origin_name'] == '':
+            continue
+        
+        # 加入完整词典
+        integral.append(entry)
+        
+        # 筛选条件3: 只有原文和译文不同时才加入迷你词典
+        if entry['origin_name'] != entry['trans_name']:
+            integral_mini_temp[entry['origin_name']].append(entry['trans_name'])
+    
+    # 3. 整理迷你词典：去重并按出现次数排序
+    integral_mini_final = {}
+    for origin_name, trans_list in integral_mini_temp.items():
+        # nset: 获取所有不重复的译名
+        nset = set(trans_list)
+        # 排序：根据每个译名在原始列表(nlist)中的出现次数进行降序排序
+        sorted_trans = sorted(nset, key=lambda x: trans_list.count(x), reverse=True)
+        integral_mini_final[origin_name] = sorted_trans
+
+    print('开始生成整合文件')
+
+    # 4. 生成JSON文本，格式与源项目完全一致
+    # Dict.json: 格式化，缩进为4
+    text = json.dumps(integral, ensure_ascii=False, indent=4)
+    # Dict-Mini.json: 压缩格式，无多余空格
+    mini_text = json.dumps(integral_mini_final, ensure_ascii=False, separators=(',', ':'))
+
+    # 5. 保存文件
+    if text != '[]':
+        Path(JSON_FILENAME).write_text(text, encoding='utf-8')
+        print(f'已生成 {JSON_FILENAME}，共有词条 {len(integral)} 个')
+    else:
+        print(f'{JSON_FILENAME} 为空，不生成文件。')
+
+    if mini_text != '{}':
+        Path(MINI_JSON_FILENAME).write_text(mini_text, encoding='utf-8')
+        print(f'已生成 {MINI_JSON_FILENAME}，共有词条 {len(integral_mini_final)} 个')
+    else:
+        print(f'{MINI_JSON_FILENAME} 为空，不生成文件。')
 
 # --- 主逻辑 ---
 def main():
