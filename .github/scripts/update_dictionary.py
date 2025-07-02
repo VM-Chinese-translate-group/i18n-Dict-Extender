@@ -16,6 +16,8 @@ CONFIG_FILE = Path(__file__).parent.parent / "config/source_mods.yml"
 DB_FILENAME = "Dict-Sqlite.db"
 JSON_FILENAME = "Dict.json"
 MINI_JSON_FILENAME = "Dict-Mini.json"
+DIFF_JSON_FILENAME = "diff.json"
+RELEASE_BODY_FILENAME = "release_body.md"
 
 SOURCE_DB_REPO = "CFPATools/i18n-dict"
 
@@ -78,12 +80,16 @@ def parse_version_from_branch(branch_name):
     print(f"警告：无法从分支名 '{branch_name}' 中解析版本号。")
     return "unknown"
 
-def process_repo(mod_config, db_cursor):
-    """处理单个模组仓库，提取翻译并更新数据库。"""
+def process_repo(mod_config, db_cursor, diff_entries):
     repo_slug = mod_config['repo']
     print(f"\n--- 开始处理模组: {repo_slug} ---")
+    
+    update_count, insert_count = 0, 0
+    branch_name_for_summary = "N/A"
+
     try:
         branch = mod_config.get('branch') or get_repo_default_branch(repo_slug)
+        branch_name_for_summary = branch # 保存分支名用于摘要
         version = mod_config.get('version') or parse_version_from_branch(branch)
 
         zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
@@ -92,7 +98,6 @@ def process_repo(mod_config, db_cursor):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             zip_path = tmp_path / "repo.zip"
-
             with requests.get(zip_url, headers=HEADERS, stream=True) as r:
                 r.raise_for_status()
                 with open(zip_path, 'wb') as f: f.write(r.content)
@@ -100,71 +105,51 @@ def process_repo(mod_config, db_cursor):
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(tmp_path)
             
-            extracted_dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
-            if len(extracted_dirs) != 1:
-                print(f"错误：解压后发现 {len(extracted_dirs)} 个顶层文件夹，预期为1个。无法继续处理 {repo_slug}。")
-                return
-            
-            repo_root_dir = extracted_dirs[0]
+            repo_root_dir = next(d for d in tmp_path.iterdir() if d.is_dir())
             print(f"找到解压后的仓库根目录: {repo_root_dir.name}")
             
             lang_paths_config = mod_config.get('lang_paths', [])
             if not lang_paths_config and mod_config.get('lang_path'):
                 lang_paths_config = [mod_config.get('lang_path')]
-            
             if not lang_paths_config:
-                print(f"错误：仓库 {repo_slug} 的配置中缺少 'lang_paths'。跳过此模组。")
-                return
+                raise ValueError(f"仓库 {repo_slug} 的配置中缺少 'lang_paths'。")
 
-            # --- 关键修改：分别独立查找 en_us.json 和 zh_cn.json ---
-            en_path = None
-            zh_path = None
-
-            print("正在按优先级查找 en_us.json...")
-            for relative_path in lang_paths_config:
-                potential_path = repo_root_dir / relative_path / "en_us.json"
-                if potential_path.exists():
-                    en_path = potential_path
-                    print(f"  -> 在 '{relative_path}' 中找到 en_us.json")
-                    break # 找到第一个就停止
-
-            print("正在按优先级查找 zh_cn.json...")
-            for relative_path in lang_paths_config:
-                potential_path = repo_root_dir / relative_path / "zh_cn.json"
-                if potential_path.exists():
-                    zh_path = potential_path
-                    print(f"  -> 在 '{relative_path}' 中找到 zh_cn.json")
-                    break # 找到第一个就停止
-
-            # 检查是否两个文件都找到了
+            en_path, zh_path = None, None
+            for p in lang_paths_config:
+                if not en_path and (repo_root_dir / p / "en_us.json").exists(): en_path = repo_root_dir / p / "en_us.json"
+                if not zh_path and (repo_root_dir / p / "zh_cn.json").exists(): zh_path = repo_root_dir / p / "zh_cn.json"
+                if en_path and zh_path: break
+            
             if not en_path or not zh_path:
-                missing_files = []
-                if not en_path: missing_files.append("en_us.json")
-                if not zh_path: missing_files.append("zh_cn.json")
-                print(f"错误：未能找到文件: {', '.join(missing_files)}。在所有指定路径中均未找到。跳过此模组。")
-                return
-
-            # 读取和处理语言文件
+                raise FileNotFoundError(f"未能找到 en_us.json 或 zh_cn.json。")
+            
             with open(en_path, 'r', encoding='utf-8') as f: en_data = json.load(f)
             with open(zh_path, 'r', encoding='utf-8') as f: zh_data = json.load(f)
 
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
             
-            update_count, insert_count = 0, 0
             for key in common_keys:
-                origin_name, trans_name = en_data[key], zh_data[key]
-                modid, curseforge = mod_config['modid'], mod_config['curseforge']
-
-                db_cursor.execute("SELECT ID FROM dict WHERE MODID=? AND KEY=? AND VERSION=? AND CURSEFORGE=?", (modid, key, version, curseforge))
+                entry_data = {
+                    'origin_name': en_data[key], 'trans_name': zh_data[key],
+                    'modid': mod_config['modid'], 'key': key,
+                    'version': version, 'curseforge': mod_config['curseforge']
+                }
+                
+                db_cursor.execute("SELECT ID FROM dict WHERE MODID=? AND KEY=? AND VERSION=? AND CURSEFORGE=?",
+                                  (entry_data['modid'], entry_data['key'], entry_data['version'], entry_data['curseforge']))
                 existing_entry = db_cursor.fetchone()
 
                 if existing_entry:
-                    db_cursor.execute("UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?", (origin_name, trans_name, existing_entry[0]))
+                    db_cursor.execute("UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?",
+                                      (entry_data['origin_name'], entry_data['trans_name'], existing_entry[0]))
                     update_count += 1
                 else:
-                    db_cursor.execute("INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE) VALUES (?, ?, ?, ?, ?, ?)", (origin_name, trans_name, modid, key, version, curseforge))
+                    db_cursor.execute("INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE) VALUES (?, ?, ?, ?, ?, ?)",
+                                      tuple(entry_data.values()))
                     insert_count += 1
+                # 无论是更新还是新增，都记录到 diff 中
+                diff_entries.append(entry_data)
             
             print(f"处理完成：{update_count} 个条目已更新，{insert_count} 个条目已插入。")
 
@@ -172,8 +157,13 @@ def process_repo(mod_config, db_cursor):
         print(f"处理仓库 {repo_slug} 时发生错误: {e}")
         import traceback
         traceback.print_exc()
+        return {'repo': repo_slug, 'branch': branch_name_for_summary, 'updated': 0, 'inserted': 0, 'error': str(e)}
+
+    return {'repo': repo_slug, 'branch': branch_name_for_summary, 'updated': update_count, 'inserted': insert_count, 'error': None}
+
 
 def initialize_db(conn):
+    """初始化数据库表结构。"""
     print("正在初始化新的数据库...")
     cursor = conn.cursor()
     cursor.execute("""
@@ -193,84 +183,57 @@ def initialize_db(conn):
     print("数据库初始化完成。")
 
 def regenerate_release_files():
-    """
-    从更新后的数据库重新生成 Dict.json 和 Dict-Mini.json。
-    此函数的逻辑严格遵循参考项目的代码，以确保生成的文件内容和格式一致。
-    """
+    """从更新后的数据库重新生成 Dict.json 和 Dict-Mini.json。"""
     print("\n--- 开始从数据库重新生成 Release 文件 (遵循源项目逻辑) ---")
     if not Path(DB_FILENAME).exists():
         print(f"错误：{DB_FILENAME} 不存在，无法生成 JSON 文件。")
         return
-
-    # 1. 从数据库读取所有数据
     conn = sqlite3.connect(DB_FILENAME)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE FROM dict")
-    # 将数据库行转换为与源项目 'i' 变量结构一致的字典列表
-    all_db_entries = [{
-        'origin_name': row['ORIGIN_NAME'],
-        'trans_name': row['TRANS_NAME'],
-        'modid': row['MODID'],
-        'key': row['KEY'],
-        'version': row['VERSION'],
-        'curseforge': row['CURSEFORGE']
-    } for row in cursor.fetchall()]
-    conn.close()
 
-    # 2. 遵循源项目的逻辑处理数据
+    print(f"正在生成 {JSON_FILENAME}...")
+    cursor.execute("SELECT ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE FROM dict")
+    all_db_entries = [{'origin_name': r['ORIGIN_NAME'], 'trans_name': r['TRANS_NAME'], 'modid': r['MODID'], 'key': r['KEY'], 'version': r['VERSION'], 'curseforge': r['CURSEFORGE']} for r in cursor.fetchall()]
+    conn.close()
     integral = []
     integral_mini_temp = defaultdict(list)
-
-    print(f'处理从数据库读取的 {len(all_db_entries)} 个词条中...')
     for entry in all_db_entries:
-        # 筛选条件1: 原文长度不能超过50
-        if len(entry['origin_name']) > 50:
-            continue
-        # 筛选条件2: 原文不能为空
-        if entry['origin_name'] == '':
-            continue
-        
-        # 加入完整词典
+        if len(entry['origin_name']) > 50 or entry['origin_name'] == '': continue
         integral.append(entry)
-        
-        # 筛选条件3: 只有原文和译文不同时才加入迷你词典
         if entry['origin_name'] != entry['trans_name']:
             integral_mini_temp[entry['origin_name']].append(entry['trans_name'])
-    
-    # 3. 整理迷你词典：去重并按出现次数排序
-    integral_mini_final = {}
-    for origin_name, trans_list in integral_mini_temp.items():
-        # nset: 获取所有不重复的译名
-        nset = set(trans_list)
-        # 排序：根据每个译名在原始列表(nlist)中的出现次数进行降序排序
-        sorted_trans = sorted(nset, key=lambda x: trans_list.count(x), reverse=True)
-        integral_mini_final[origin_name] = sorted_trans
-
-    print('开始生成整合文件')
-
-    # 4. 生成JSON文本，格式与源项目完全一致
-    # Dict.json: 格式化，缩进为4
+    integral_mini_final = { o: sorted(set(t), key=lambda x: t.count(x), reverse=True) for o, t in integral_mini_temp.items() }
     text = json.dumps(integral, ensure_ascii=False, indent=4)
-    # Dict-Mini.json: 压缩格式，无多余空格
     mini_text = json.dumps(integral_mini_final, ensure_ascii=False, separators=(',', ':'))
+    if text != '[]': Path(JSON_FILENAME).write_text(text, encoding='utf-8'); print(f'已生成 {JSON_FILENAME}，共有词条 {len(integral)} 个')
+    if mini_text != '{}': Path(MINI_JSON_FILENAME).write_text(mini_text, encoding='utf-8'); print(f'已生成 {MINI_JSON_FILENAME}，共有词条 {len(integral_mini_final)} 个')
 
-    # 5. 保存文件
-    if text != '[]':
-        Path(JSON_FILENAME).write_text(text, encoding='utf-8')
-        print(f'已生成 {JSON_FILENAME}，共有词条 {len(integral)} 个')
-    else:
-        print(f'{JSON_FILENAME} 为空，不生成文件。')
+# --- 生成 Release Body 的 Markdown 文本 ---
+def generate_release_body(summaries, diff_count):
+    body = []
+    body.append("## 自动词典数据更新")
+    body.append(f"本次运行共计处理了 **{diff_count}** 个新增或更新的词条。")
+    body.append("\n### 数据来源与变更摘要\n")
+    
+    if not summaries:
+        body.append("本次运行未从任何仓库拉取新数据。")
+        return "\n".join(body)
 
-    if mini_text != '{}':
-        Path(MINI_JSON_FILENAME).write_text(mini_text, encoding='utf-8')
-        print(f'已生成 {MINI_JSON_FILENAME}，共有词条 {len(integral_mini_final)} 个')
-    else:
-        print(f'{MINI_JSON_FILENAME} 为空，不生成文件。')
+    # 表头
+    body.append("| 模组仓库 | 分支 | 新增条目 | 更新条目 | 状态 |")
+    body.append("|---|---|---:|---:|:---|")
+    
+    # 表格内容
+    for s in summaries:
+        status = "✅ 成功" if not s.get('error') else f"❌ 失败: `{s['error']}`"
+        row = f"| `{s['repo']}` | `{s['branch']}` | {s['inserted']} | {s['updated']} | {status} |"
+        body.append(row)
+        
+    body.append("\n`diff.json` 文件包含了本次运行所有新增和更新的条目详情。")
+    return "\n".join(body)
 
-# --- 主逻辑 ---
 def main():
-    # 步骤 1: 获取或创建数据库
     if not get_latest_release_db():
         conn = sqlite3.connect(DB_FILENAME)
         initialize_db(conn)
@@ -278,20 +241,37 @@ def main():
         conn = sqlite3.connect(DB_FILENAME)
     
     cursor = conn.cursor()
+    
+    run_summaries = []
+    diff_entries = [] # 存储所有变动的条目
 
-    # 步骤 2: 读取配置并处理每个模组
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
     for mod_config in config.get('mods', []):
-        process_repo(mod_config, cursor)
-    
+        # 传入 diff_entries 列表以收集变动
+        summary = process_repo(mod_config, cursor, diff_entries)
+        if summary:
+            run_summaries.append(summary)
+            
     conn.commit()
     conn.close()
 
-    # 步骤 3: 从更新后的数据库重新生成所有文件
+    # 从更新后的数据库重新生成主要文件
     regenerate_release_files()
+    
+    # 生成 diff.json
+    print(f"\n正在生成 {DIFF_JSON_FILENAME}，包含 {len(diff_entries)} 个变动条目...")
+    with open(DIFF_JSON_FILENAME, 'w', encoding='utf-8') as f:
+        json.dump(diff_entries, f, ensure_ascii=False, indent=4)
+    print(f"{DIFF_JSON_FILENAME} 生成完毕。")
 
+    # 生成 Release Body 文件
+    print(f"正在生成 {RELEASE_BODY_FILENAME}...")
+    release_body_content = generate_release_body(run_summaries, len(diff_entries))
+    Path(RELEASE_BODY_FILENAME).write_text(release_body_content, encoding='utf-8')
+    print(f"{RELEASE_BODY_FILENAME} 生成完毕。")
+    
     print(f"\n所有任务完成！将在仓库 {GITHUB_REPO} 上创建 Release。")
 
 if __name__ == "__main__":

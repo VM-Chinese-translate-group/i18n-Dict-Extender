@@ -1,13 +1,13 @@
 name: Update and Release Dictionary
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
   schedule:
     # 每周五 UTC 时间 10:00 执行 (北京时间 18:00)
     - cron: '0 10 * * 5'
 
 permissions:
-  contents: write
+  contents: write # 需要写权限来创建 Release
 
 jobs:
   build-and-release:
@@ -35,16 +35,21 @@ jobs:
         run: |
           echo "RELEASE_TAG=dict-update-$(date -u +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
           echo "RELEASE_NAME=自动词典更新 $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_ENV
+          # 使用 heredoc 语法安全地读取多行文件内容
+          echo 'RELEASE_BODY<<EOF' >> $GITHUB_ENV
+          cat release_body.md >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
-          body: |
-            自动词典数据更新。
-            本次更新基于 `CFPATools/i18n-dict` 的最新词典，并整合了配置文件中指定的模组翻译。
+          # 使用从文件中读取的 body
+          body: ${{ env.RELEASE_BODY }}
+          # 添加 diff.json 到上传列表
           files: |
             Dict.json
             Dict-Mini.json
             Dict-Sqlite.db
+            diff.json
