@@ -82,13 +82,10 @@ def process_repo(mod_config, db_cursor):
     """处理单个模组仓库，提取翻译并更新数据库。"""
     repo_slug = mod_config['repo']
     print(f"\n--- 开始处理模组: {repo_slug} ---")
-
     try:
-        # 确定分支和版本
         branch = mod_config.get('branch') or get_repo_default_branch(repo_slug)
         version = mod_config.get('version') or parse_version_from_branch(branch)
 
-        # 下载仓库 zip 包
         zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
         print(f"正在从 {zip_url} 下载仓库...")
         
@@ -103,24 +100,27 @@ def process_repo(mod_config, db_cursor):
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(tmp_path)
             
-            extracted_dir = next(d for d in tmp_path.iterdir() if d.is_dir())
+            extracted_dirs = [d for d in tmp_path.iterdir() if d.is_dir()]
+            if len(extracted_dirs) != 1:
+                print(f"错误：解压后发现 {len(extracted_dirs)} 个顶层文件夹，预期为1个。无法继续处理 {repo_slug}。")
+                return
             
-            # --- 处理多个语言路径 ---
-            lang_paths_config = mod_config.get('lang_paths')
-            if not lang_paths_config: # 向后兼容旧的 lang_path
-                single_path = mod_config.get('lang_path')
-                if single_path:
-                    lang_paths_config = [single_path]
-                else:
-                    print(f"错误：仓库 {repo_slug} 的配置中缺少 'lang_paths'。跳过此模组。")
-                    return
+            repo_root_dir = extracted_dirs[0]
+            print(f"找到解压后的仓库根目录: {repo_root_dir.name}")
+            
+            lang_paths_config = mod_config.get('lang_paths', [])
+            if not lang_paths_config and mod_config.get('lang_path'):
+                lang_paths_config = [mod_config.get('lang_path')]
+            
+            if not lang_paths_config:
+                print(f"错误：仓库 {repo_slug} 的配置中缺少 'lang_paths'。跳过此模组。")
+                return
 
             found_lang_dir = None
             for relative_path in lang_paths_config:
-                potential_dir = extracted_dir / relative_path
-                en_path = potential_dir / "en_us.json"
-                zh_path = potential_dir / "zh_cn.json"
-                if en_path.exists() and zh_path.exists():
+                # 所有路径查找都基于找到的仓库根目录
+                potential_dir = repo_root_dir / relative_path
+                if (potential_dir / "en_us.json").exists() and (potential_dir / "zh_cn.json").exists():
                     print(f"在路径 '{relative_path}' 中找到语言文件。")
                     found_lang_dir = potential_dir
                     break
@@ -136,9 +136,7 @@ def process_repo(mod_config, db_cursor):
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
             
-            update_count = 0
-            insert_count = 0
-
+            update_count, insert_count = 0, 0
             for key in common_keys:
                 origin_name, trans_name = en_data[key], zh_data[key]
                 modid, curseforge = mod_config['modid'], mod_config['curseforge']
