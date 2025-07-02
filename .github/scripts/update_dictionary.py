@@ -20,7 +20,7 @@ MINI_JSON_FILENAME = "Dict-Mini.json"
 SOURCE_DB_REPO = "CFPATools/i18n-dict"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = os.getenv("GITHUB_REPOSITORY") 
+GITHUB_REPO = os.getenv("GITHUB_REPOSITORY")
 
 if not GITHUB_TOKEN or not GITHUB_REPO:
     print("错误：环境变量 GITHUB_TOKEN 和 GITHUB_REPOSITORY 未设置。")
@@ -37,7 +37,7 @@ def get_latest_release_db():
     
     response = requests.get(release_url, headers=HEADERS)
     if response.status_code != 200:
-        print(f"警告：无法从 {SOURCE_DB_REPO} 获取最新 Release。可能这是第一次运行或上游仓库无 Release。将创建一个新的数据库。")
+        print(f"警告：无法从 {SOURCE_DB_REPO} 获取最新 Release。将创建一个新的数据库。")
         return False
 
     assets = response.json().get("assets", [])
@@ -85,13 +85,8 @@ def process_repo(mod_config, db_cursor):
 
     try:
         # 确定分支和版本
-        branch = mod_config.get('branch')
-        if not branch:
-            branch = get_repo_default_branch(repo_slug)
-        
-        version = mod_config.get('version')
-        if not version:
-            version = parse_version_from_branch(branch)
+        branch = mod_config.get('branch') or get_repo_default_branch(repo_slug)
+        version = mod_config.get('version') or parse_version_from_branch(branch)
 
         # 下载仓库 zip 包
         zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
@@ -103,32 +98,40 @@ def process_repo(mod_config, db_cursor):
 
             with requests.get(zip_url, headers=HEADERS, stream=True) as r:
                 r.raise_for_status()
-                with open(zip_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
+                with open(zip_path, 'wb') as f: f.write(r.content)
             
-            # 解压
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(tmp_path)
             
-            # 找到解压后的根目录
-            extracted_dir = next(tmp_path.iterdir())
-            if not extracted_dir.is_dir():
-                 extracted_dir = next(tmp_path.iterdir())
+            extracted_dir = next(d for d in tmp_path.iterdir() if d.is_dir())
             
-            lang_dir = extracted_dir / mod_config['lang_path']
-            en_path = lang_dir / "en_us.json"
-            zh_path = lang_dir / "zh_cn.json"
+            # --- 处理多个语言路径 ---
+            lang_paths_config = mod_config.get('lang_paths')
+            if not lang_paths_config: # 向后兼容旧的 lang_path
+                single_path = mod_config.get('lang_path')
+                if single_path:
+                    lang_paths_config = [single_path]
+                else:
+                    print(f"错误：仓库 {repo_slug} 的配置中缺少 'lang_paths'。跳过此模组。")
+                    return
 
-            if not en_path.exists() or not zh_path.exists():
-                print(f"错误：在 {lang_dir} 中未找到 en_us.json 或 zh_cn.json。跳过此模组。")
+            found_lang_dir = None
+            for relative_path in lang_paths_config:
+                potential_dir = extracted_dir / relative_path
+                en_path = potential_dir / "en_us.json"
+                zh_path = potential_dir / "zh_cn.json"
+                if en_path.exists() and zh_path.exists():
+                    print(f"在路径 '{relative_path}' 中找到语言文件。")
+                    found_lang_dir = potential_dir
+                    break
+            
+            if not found_lang_dir:
+                print(f"错误：在所有指定路径 {lang_paths_config} 中均未找到 en_us.json 和 zh_cn.json。跳过此模组。")
                 return
 
             # 读取和处理语言文件
-            with open(en_path, 'r', encoding='utf-8') as f:
-                en_data = json.load(f)
-            with open(zh_path, 'r', encoding='utf-8') as f:
-                zh_data = json.load(f)
+            with open(found_lang_dir / "en_us.json", 'r', encoding='utf-8') as f: en_data = json.load(f)
+            with open(found_lang_dir / "zh_cn.json", 'r', encoding='utf-8') as f: zh_data = json.load(f)
 
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
@@ -137,27 +140,17 @@ def process_repo(mod_config, db_cursor):
             insert_count = 0
 
             for key in common_keys:
-                origin_name = en_data[key]
-                trans_name = zh_data[key]
-                modid = mod_config['modid']
-                curseforge = mod_config['curseforge']
+                origin_name, trans_name = en_data[key], zh_data[key]
+                modid, curseforge = mod_config['modid'], mod_config['curseforge']
 
-                db_cursor.execute("""
-                    SELECT ID FROM dict WHERE MODID=? AND KEY=? AND VERSION=? AND CURSEFORGE=?
-                """, (modid, key, version, curseforge))
-                
+                db_cursor.execute("SELECT ID FROM dict WHERE MODID=? AND KEY=? AND VERSION=? AND CURSEFORGE=?", (modid, key, version, curseforge))
                 existing_entry = db_cursor.fetchone()
 
                 if existing_entry:
-                    db_cursor.execute("""
-                        UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?
-                    """, (origin_name, trans_name, existing_entry[0]))
+                    db_cursor.execute("UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?", (origin_name, trans_name, existing_entry[0]))
                     update_count += 1
                 else:
-                    db_cursor.execute("""
-                        INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (origin_name, trans_name, modid, key, version, curseforge))
+                    db_cursor.execute("INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE) VALUES (?, ?, ?, ?, ?, ?)", (origin_name, trans_name, modid, key, version, curseforge))
                     insert_count += 1
             
             print(f"处理完成：{update_count} 个条目已更新，{insert_count} 个条目已插入。")
@@ -167,9 +160,7 @@ def process_repo(mod_config, db_cursor):
         import traceback
         traceback.print_exc()
 
-
 def initialize_db(conn):
-    """初始化数据库表结构。"""
     print("正在初始化新的数据库...")
     cursor = conn.cursor()
     cursor.execute("""
@@ -189,38 +180,27 @@ def initialize_db(conn):
     print("数据库初始化完成。")
 
 def regenerate_release_files():
-    """从更新后的数据库重新生成 Dict.json 和 Dict-Mini.json。"""
     print("\n--- 开始从数据库重新生成 Release 文件 ---")
     if not Path(DB_FILENAME).exists():
         print(f"错误：{DB_FILENAME} 不存在，无法生成 JSON 文件。")
         return
-
     conn = sqlite3.connect(DB_FILENAME)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-
     print(f"正在生成 {JSON_FILENAME}...")
     cursor.execute("SELECT ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE FROM dict")
     all_entries = [dict(row) for row in cursor.fetchall()]
-    
     with open(JSON_FILENAME, 'w', encoding='utf-8') as f:
         json.dump(all_entries, f, ensure_ascii=False, indent=4)
     print(f"{JSON_FILENAME} 生成完毕。")
-
     print(f"正在生成 {MINI_JSON_FILENAME}...")
     trans_counts = defaultdict(lambda: defaultdict(int))
     for entry in all_entries:
         trans_counts[entry['ORIGIN_NAME']][entry['TRANS_NAME']] += 1
-
-    mini_dict = {}
-    for origin, trans_map in trans_counts.items():
-        sorted_trans = sorted(trans_map.keys(), key=lambda t: trans_map[t], reverse=True)
-        mini_dict[origin] = sorted_trans
-        
+    mini_dict = {origin: sorted(trans_map.keys(), key=lambda t: trans_map[t], reverse=True) for origin, trans_map in trans_counts.items()}
     with open(MINI_JSON_FILENAME, 'w', encoding='utf-8') as f:
         json.dump(mini_dict, f, ensure_ascii=False, indent=2)
     print(f"{MINI_JSON_FILENAME} 生成完毕。")
-
     conn.close()
 
 # --- 主逻辑 ---

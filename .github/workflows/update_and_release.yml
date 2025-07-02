@@ -1,13 +1,13 @@
 name: Update and Release Dictionary
 
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
   schedule:
     # 每周五 UTC 时间 10:00 执行 (北京时间 18:00)
     - cron: '0 10 * * 5'
 
 permissions:
-  contents: write # 需要写权限来创建 Release
+  contents: write
 
 jobs:
   build-and-release:
@@ -27,16 +27,20 @@ jobs:
       - name: Run update script
         run: python .github/scripts/update_dictionary.py
         env:
-          # GITHUB_TOKEN 是由 GitHub Actions 自动提供的
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # GITHUB_REPOSITORY 指的是当前运行工作流的仓库
           GITHUB_REPOSITORY: ${{ github.repository }}
       
+      - name: Generate release info
+        id: generate_info
+        run: |
+          echo "RELEASE_TAG=dict-update-$(date -u +'%Y-%m-%d-%H%M')" >> $GITHUB_ENV
+          echo "RELEASE_NAME=自动词典更新 $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_ENV
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: dict-update-${{ env.RELEASE_DATE }}
-          name: "自动词典更新 ${{ env.RELEASE_DATE_PRETTY }}"
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
           body: |
             自动词典数据更新。
             本次更新基于 `CFPATools/i18n-dict` 的最新词典，并整合了配置文件中指定的模组翻译。
@@ -44,6 +48,3 @@ jobs:
             Dict.json
             Dict-Mini.json
             Dict-Sqlite.db
-        env:
-          RELEASE_DATE: $(date -u +'%Y-%m-%d-%H-%M')
-          RELEASE_DATE_PRETTY: $(date -u +'%Y-%m-%d %H:%M UTC')
