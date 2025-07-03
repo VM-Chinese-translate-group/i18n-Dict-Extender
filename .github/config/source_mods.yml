@@ -13,6 +13,14 @@ mods:
     version: "1.20" 
     curseforge: "create"
 
+  - repo: "Yirmiri/Dungeons-Delight"
+    lang_paths:
+      - "src/main/resources/assets/dungeonsdelight/lang/"
+      - "src/generated/resources/assets/dungeonsdelight/lang"
+    modid: "dungeonsdelight"
+    version: "1.20" 
+    curseforge: "dungeons-delight"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
