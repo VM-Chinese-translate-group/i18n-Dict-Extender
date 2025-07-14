@@ -21,6 +21,19 @@ mods:
     version: "1.20" 
     curseforge: "dungeons-delight"
 
+    repo: "Team-EnderIO/EnderIO"
+    # 合并所有路径下的文件
+    merge_paths: true
+    # 列出所有包含语言文件的子模块路径
+    lang_paths:
+      - "enderio-base/src/main/resources/assets/enderio/lang/"
+      - "enderio-armory/src/main/resources/assets/enderio/lang/"
+      - "enderio-conduits/src/main/resources/assets/enderio/lang/"
+      - "enderio-machines/src/main/resources/assets/enderio/lang/"
+      - "enderio-conduits-modded/src/main/resources/assets/enderio/lang/"
+    modid: "enderio"
+    curseforge: "ender-io"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:

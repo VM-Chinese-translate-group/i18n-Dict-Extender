@@ -81,6 +81,7 @@ def parse_version_from_branch(branch_name):
     return "unknown"
 
 def process_repo(mod_config, db_cursor, diff_entries):
+    """处理单个模组仓库，提取翻译并更新数据库。"""
     repo_slug = mod_config['repo']
     print(f"\n--- 开始处理模组: {repo_slug} ---")
     
@@ -114,17 +115,44 @@ def process_repo(mod_config, db_cursor, diff_entries):
             if not lang_paths_config:
                 raise ValueError(f"仓库 {repo_slug} 的配置中缺少 'lang_paths'。")
 
-            en_path, zh_path = None, None
-            for p in lang_paths_config:
-                if not en_path and (repo_root_dir / p / "en_us.json").exists(): en_path = repo_root_dir / p / "en_us.json"
-                if not zh_path and (repo_root_dir / p / "zh_cn.json").exists(): zh_path = repo_root_dir / p / "zh_cn.json"
-                if en_path and zh_path: break
-            
-            if not en_path or not zh_path:
-                raise FileNotFoundError(f"未能找到 en_us.json 或 zh_cn.json。")
-            
-            with open(en_path, 'r', encoding='utf-8') as f: en_data = json.load(f)
-            with open(zh_path, 'r', encoding='utf-8') as f: zh_data = json.load(f)
+            en_data, zh_data = {}, {}
+            merge_mode = mod_config.get('merge_paths', False)
+
+            if merge_mode:
+                print("模式：合并多个语言文件。")
+                found_any_en, found_any_zh = False, False
+                for relative_path in lang_paths_config:
+                    en_json_path = repo_root_dir / relative_path / "en_us.json"
+                    zh_json_path = repo_root_dir / relative_path / "zh_cn.json"
+
+                    if en_json_path.exists():
+                        print(f"  -> 正在从 '{relative_path}' 合并 en_us.json...")
+                        with open(en_json_path, 'r', encoding='utf-8') as f:
+                            en_data.update(json.load(f))
+                        found_any_en = True
+                    
+                    if zh_json_path.exists():
+                        print(f"  -> 正在从 '{relative_path}' 合并 zh_cn.json...")
+                        with open(zh_json_path, 'r', encoding='utf-8') as f:
+                            zh_data.update(json.load(f))
+                        found_any_zh = True
+                
+                if not found_any_en or not found_any_zh:
+                    raise FileNotFoundError("合并模式下，未能找到 en_us.json 或 zh_cn.json 文件。")
+
+            else:
+                print("模式：按优先级查找单个语言文件。")
+                en_path, zh_path = None, None
+                for p in lang_paths_config:
+                    if not en_path and (repo_root_dir / p / "en_us.json").exists(): en_path = repo_root_dir / p / "en_us.json"
+                    if not zh_path and (repo_root_dir / p / "zh_cn.json").exists(): zh_path = repo_root_dir / p / "zh_cn.json"
+                    if en_path and zh_path: break
+                
+                if not en_path or not zh_path:
+                    raise FileNotFoundError(f"未能找到 en_us.json 或 zh_cn.json。")
+                
+                with open(en_path, 'r', encoding='utf-8') as f: en_data = json.load(f)
+                with open(zh_path, 'r', encoding='utf-8') as f: zh_data = json.load(f)
 
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
@@ -148,7 +176,6 @@ def process_repo(mod_config, db_cursor, diff_entries):
                     db_cursor.execute("INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE) VALUES (?, ?, ?, ?, ?, ?)",
                                       tuple(entry_data.values()))
                     insert_count += 1
-                # 无论是更新还是新增，都记录到 diff 中
                 diff_entries.append(entry_data)
             
             print(f"处理完成：{update_count} 个条目已更新，{insert_count} 个条目已插入。")
