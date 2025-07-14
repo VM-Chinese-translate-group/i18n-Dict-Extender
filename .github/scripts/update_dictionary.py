@@ -8,15 +8,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 from collections import defaultdict, Counter
-
-try:
-    import orjson as json
-    ORJSON_AVAILABLE = True
-    print("已加载高性能 orjson 库。")
-except ImportError:
-    import json
-    ORJSON_AVAILABLE = False
-    print("警告：orjson 库未安装，将使用内置 json 库。")
+import json
 
 # --- 配置常量 ---
 CONFIG_FILE = Path(__file__).parent.parent / "config/source_mods.yml"
