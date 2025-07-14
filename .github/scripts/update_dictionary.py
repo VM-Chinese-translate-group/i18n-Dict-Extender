@@ -3,13 +3,20 @@ import sys
 import requests
 import yaml
 import sqlite3
-import json
 import re
 import tempfile
 import zipfile
-import shutil
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, Counter
+
+try:
+    import orjson as json
+    ORJSON_AVAILABLE = True
+    print("已加载高性能 orjson 库。")
+except ImportError:
+    import json
+    ORJSON_AVAILABLE = False
+    print("警告：orjson 库未安装，将使用内置 json 库。")
 
 # --- 配置常量 ---
 CONFIG_FILE = Path(__file__).parent.parent / "config/source_mods.yml"
@@ -84,8 +91,7 @@ def process_repo(mod_config, db_cursor, diff_entries):
     """处理单个模组仓库，提取翻译并更新数据库。"""
     repo_slug = mod_config['repo']
     print(f"\n--- 开始处理模组: {repo_slug} ---")
-    
-    update_count, insert_count = 0, 0
+
     branch_name_for_summary = "N/A"
 
     try:
@@ -120,32 +126,20 @@ def process_repo(mod_config, db_cursor, diff_entries):
 
             if merge_mode:
                 print("模式：合并多个语言文件。")
-                found_any_en, found_any_zh = False, False
                 for relative_path in lang_paths_config:
-                    en_json_path = repo_root_dir / relative_path / "en_us.json"
-                    zh_json_path = repo_root_dir / relative_path / "zh_cn.json"
-
-                    if en_json_path.exists():
-                        print(f"  -> 正在从 '{relative_path}' 合并 en_us.json...")
-                        with open(en_json_path, 'r', encoding='utf-8') as f:
-                            en_data.update(json.load(f))
-                        found_any_en = True
-                    
-                    if zh_json_path.exists():
-                        print(f"  -> 正在从 '{relative_path}' 合并 zh_cn.json...")
-                        with open(zh_json_path, 'r', encoding='utf-8') as f:
-                            zh_data.update(json.load(f))
-                        found_any_zh = True
-                
-                if not found_any_en or not found_any_zh:
+                    if (en_json_path := repo_root_dir / relative_path / "en_us.json").exists():
+                        with open(en_json_path, 'r', encoding='utf-8') as f: en_data.update(json.load(f))
+                    if (zh_json_path := repo_root_dir / relative_path / "zh_cn.json").exists():
+                        with open(zh_json_path, 'r', encoding='utf-8') as f: zh_data.update(json.load(f))
+                if not en_data or not zh_data:
                     raise FileNotFoundError("合并模式下，未能找到 en_us.json 或 zh_cn.json 文件。")
 
             else:
                 print("模式：按优先级查找单个语言文件。")
                 en_path, zh_path = None, None
                 for p in lang_paths_config:
-                    if not en_path and (repo_root_dir / p / "en_us.json").exists(): en_path = repo_root_dir / p / "en_us.json"
-                    if not zh_path and (repo_root_dir / p / "zh_cn.json").exists(): zh_path = repo_root_dir / p / "zh_cn.json"
+                    if not en_path and (p_en := repo_root_dir / p / "en_us.json").exists(): en_path = p_en
+                    if not zh_path and (p_zh := repo_root_dir / p / "zh_cn.json").exists(): zh_path = p_zh
                     if en_path and zh_path: break
                 
                 if not en_path or not zh_path:
@@ -156,28 +150,44 @@ def process_repo(mod_config, db_cursor, diff_entries):
 
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
-            
+
+            # --- START OF MINIMAL CHANGE ---
+            # 1. 一次性查询出所有可能相关的现有条目
+            db_cursor.execute("SELECT key, ID FROM dict WHERE modid=? AND version=? AND curseforge=?",
+                              (mod_config['modid'], version, mod_config['curseforge']))
+            existing_entries_map = {row[0]: row[1] for row in db_cursor.fetchall()}
+
+            # 2. 在内存中分类需要更新和需要插入的数据
+            to_update = []
+            to_insert = []
+
             for key in common_keys:
                 entry_data = {
                     'origin_name': en_data[key], 'trans_name': zh_data[key],
                     'modid': mod_config['modid'], 'key': key,
                     'version': version, 'curseforge': mod_config['curseforge']
                 }
-                
-                db_cursor.execute("SELECT ID FROM dict WHERE MODID=? AND KEY=? AND VERSION=? AND CURSEFORGE=?",
-                                  (entry_data['modid'], entry_data['key'], entry_data['version'], entry_data['curseforge']))
-                existing_entry = db_cursor.fetchone()
-
-                if existing_entry:
-                    db_cursor.execute("UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?",
-                                      (entry_data['origin_name'], entry_data['trans_name'], existing_entry[0]))
-                    update_count += 1
-                else:
-                    db_cursor.execute("INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE) VALUES (?, ?, ?, ?, ?, ?)",
-                                      tuple(entry_data.values()))
-                    insert_count += 1
                 diff_entries.append(entry_data)
-            
+
+                existing_id = existing_entries_map.get(key)
+                if existing_id:
+                    # 准备更新数据: (origin, trans, id)
+                    to_update.append((entry_data['origin_name'], entry_data['trans_name'], existing_id))
+                else:
+                    # 准备插入数据
+                    to_insert.append(tuple(entry_data.values()))
+
+            # 3. 使用 executemany() 进行批量更新和插入
+            if to_update:
+                db_cursor.executemany("UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?", to_update)
+            if to_insert:
+                db_cursor.executemany(
+                    "INSERT INTO dict (ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE) VALUES (?, ?, ?, ?, ?, ?)",
+                    to_insert)
+
+            update_count, insert_count = len(to_update), len(to_insert)
+            # --- END OF MINIMAL CHANGE ---
+
             print(f"处理完成：{update_count} 个条目已更新，{insert_count} 个条目已插入。")
 
     except Exception as e:
@@ -186,7 +196,8 @@ def process_repo(mod_config, db_cursor, diff_entries):
         traceback.print_exc()
         return {'repo': repo_slug, 'branch': branch_name_for_summary, 'updated': 0, 'inserted': 0, 'error': str(e)}
 
-    return {'repo': repo_slug, 'branch': branch_name_for_summary, 'updated': update_count, 'inserted': insert_count, 'error': None}
+    return {'repo': repo_slug, 'branch': branch_name_for_summary, 'updated': update_count, 'inserted': insert_count,
+            'error': None}
 
 
 def initialize_db(conn):
@@ -210,31 +221,60 @@ def initialize_db(conn):
     print("数据库初始化完成。")
 
 def regenerate_release_files():
-    """从更新后的数据库重新生成 Dict.json 和 Dict-Mini.json。"""
+    """
+    从更新后的数据库重新生成 Dict.json 和 Dict-Mini.json。
+    此函数的逻辑严格遵循参考项目的代码，以确保生成的文件内容和格式一致。
+    """
     print("\n--- 开始从数据库重新生成 Release 文件 (遵循源项目逻辑) ---")
     if not Path(DB_FILENAME).exists():
         print(f"错误：{DB_FILENAME} 不存在，无法生成 JSON 文件。")
         return
+
     conn = sqlite3.connect(DB_FILENAME)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     print(f"正在生成 {JSON_FILENAME}...")
     cursor.execute("SELECT ORIGIN_NAME, TRANS_NAME, MODID, KEY, VERSION, CURSEFORGE FROM dict")
-    all_db_entries = [{'origin_name': r['ORIGIN_NAME'], 'trans_name': r['TRANS_NAME'], 'modid': r['MODID'], 'key': r['KEY'], 'version': r['VERSION'], 'curseforge': r['CURSEFORGE']} for r in cursor.fetchall()]
+    all_db_entries = [
+        {'origin_name': r['ORIGIN_NAME'], 'trans_name': r['TRANS_NAME'], 'modid': r['MODID'], 'key': r['KEY'],
+         'version': r['VERSION'], 'curseforge': r['CURSEFORGE']} for r in cursor.fetchall()]
     conn.close()
+
     integral = []
     integral_mini_temp = defaultdict(list)
+
+    print(f'处理从数据库读取的 {len(all_db_entries)} 个词条中...')
     for entry in all_db_entries:
         if len(entry['origin_name']) > 50 or entry['origin_name'] == '': continue
         integral.append(entry)
         if entry['origin_name'] != entry['trans_name']:
             integral_mini_temp[entry['origin_name']].append(entry['trans_name'])
-    integral_mini_final = { o: sorted(set(t), key=lambda x: t.count(x), reverse=True) for o, t in integral_mini_temp.items() }
+
+    # --- START OF MINIMAL CHANGE ---
+    # 使用 Counter 进行高效排序
+    integral_mini_final = {
+        origin_name: [item for item, count in Counter(trans_list).most_common()]
+        for origin_name, trans_list in integral_mini_temp.items()
+    }
+    # --- END OF MINIMAL CHANGE ---
+
+    print('开始生成整合文件')
+
     text = json.dumps(integral, ensure_ascii=False, indent=4)
     mini_text = json.dumps(integral_mini_final, ensure_ascii=False, separators=(',', ':'))
-    if text != '[]': Path(JSON_FILENAME).write_text(text, encoding='utf-8'); print(f'已生成 {JSON_FILENAME}，共有词条 {len(integral)} 个')
-    if mini_text != '{}': Path(MINI_JSON_FILENAME).write_text(mini_text, encoding='utf-8'); print(f'已生成 {MINI_JSON_FILENAME}，共有词条 {len(integral_mini_final)} 个')
+
+    if text != '[]':
+        Path(JSON_FILENAME).write_text(text, encoding='utf-8')
+        print(f'已生成 {JSON_FILENAME}，共有词条 {len(integral)} 个')
+    else:
+        print(f'{JSON_FILENAME} 为空，不生成文件。')
+
+    if mini_text != '{}':
+        Path(MINI_JSON_FILENAME).write_text(mini_text, encoding='utf-8')
+        print(f'已生成 {MINI_JSON_FILENAME}，共有词条 {len(integral_mini_final)} 个')
+    else:
+        print(f'{MINI_JSON_FILENAME} 为空，不生成文件。')
 
 # --- 生成 Release Body 的 Markdown 文本 ---
 def generate_release_body(summaries, diff_count):
