@@ -27,10 +27,15 @@ mods:
     # 列出所有包含语言文件的子模块路径
     lang_paths:
       - "enderio-base/src/main/resources/assets/enderio/lang/"
+      - "enderio-base/src/generated/resources/assets/enderio/lang/"
       - "enderio-armory/src/main/resources/assets/enderio/lang/"
+      - "enderio-armory/src/generated/resources/assets/enderio/lang/"
       - "enderio-conduits/src/main/resources/assets/enderio/lang/"
+      - "enderio-conduits/src/generated/resources/assets/enderio/lang/"
       - "enderio-machines/src/main/resources/assets/enderio/lang/"
+      - "enderio-machines/src/generated/resources/assets/enderio/lang/"
       - "enderio-conduits-modded/src/main/resources/assets/enderio/lang/"
+      - "enderio-conduits-modded/src/generated/resources/assets/enderio/lang/"
     modid: "enderio"
     curseforge: "ender-io"
 
