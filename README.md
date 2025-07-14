@@ -103,6 +103,23 @@ mods:
     # 模组的 CurseForge ID
     curseforge: "create"
 ```
+#### 合并模式
+
+对于像 EnderIO 这样语言文件分散在多个子模块中的复杂项目，您可以启用 `merge_paths` 模式。这会告诉脚本去**合并**所有在 `lang_paths` 中找到的语言文件，而不是只取第一个。
+
+```yaml
+  - # --- EnderIO 模组的配置示例 (使用新的合并模式) ---
+    repo: "Team-EnderIO/EnderIO"
+    # 新增配置项，告诉脚本合并所有路径下的文件
+    merge_paths: true
+    # 列出所有包含语言文件的子模块路径
+    lang_paths:
+      - "enderio-base/src/main/resources/assets/enderio/lang/"
+      - "enderio-base/src/generated/resources/assets/enderio/lang/"
+      ······
+    modid: "enderio"
+    curseforge: "ender-io"
+```
 
 ## 📜 版权归属
 
