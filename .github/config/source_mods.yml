@@ -39,6 +39,25 @@ mods:
     modid: "enderio"
     curseforge: "ender-io"
 
+  - repo: "SlimeKnights/TinkersConstruct"
+    lang_paths:
+      - "src/main/resources/assets/tconstruct/lang/"
+    modid: "tconstruct"
+    curseforge: "tinkers-construct"
+
+  - repo: "Shadows-of-Fire/Apotheosis"
+    lang_paths:
+      - "src/main/resources/assets/apotheosis/lang/"
+    modid: "apotheosis"
+    curseforge: "apotheosis"
+
+  - repo: "Potion-Studios/Oh-The-Biomes-Weve-Gone"
+    lang_paths:
+      - "Common/src/main/resources/assets/biomeswevegone/lang/"
+      - "Common/src/main/generated/resources/assets/biomeswevegone/lang/"
+    modid: "biomeswevegone"
+    curseforge: "oh-the-biomes-weve-gone"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
