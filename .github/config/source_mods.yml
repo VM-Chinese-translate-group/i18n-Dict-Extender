@@ -21,7 +21,7 @@ mods:
     version: "1.20" 
     curseforge: "dungeons-delight"
 
-    repo: "Team-EnderIO/EnderIO"
+  - repo: "Team-EnderIO/EnderIO"
     # 合并所有路径下的文件
     merge_paths: true
     # 列出所有包含语言文件的子模块路径
