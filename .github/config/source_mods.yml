@@ -58,6 +58,34 @@ mods:
     modid: "biomeswevegone"
     curseforge: "oh-the-biomes-weve-gone"
 
+  - repo: "mekanism/Mekanism"
+    lang_paths:
+      - "src/main/resources/assets/mekanism/lang/"
+      - "src/datagen/generated/mekanism/assets/mekanism/lang/"
+    modid: "mekanism"
+    curseforge: "mekanism"
+
+  - repo: "Tslat/Advent-Of-Ascension"
+    lang_paths:
+      - "lang/"
+    modid: "aoa3"
+    curseforge: "advent-of-ascension-nevermine"
+
+  - repo: "AppliedEnergistics/Applied-Energistics-2"
+    lang_paths:
+      - "src/main/resources/assets/ae2/lang/"
+      - "src/generated/resources/assets/ae2/lang/"
+    modid: "ae2"
+    version: "1.21"
+    curseforge: "applied-energistics-2"
+  
+  - repo: "P3pp3rF1y/SophisticatedStorage"
+    lang_paths:
+      - "src/main/resources/assets/sophisticatedstorage/lang/"
+    modid: "sophisticatedstorage"
+    version: "1.21"
+    curseforge: "sophisticated-storage"
+  
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
