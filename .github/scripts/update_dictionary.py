@@ -172,10 +172,6 @@ def process_repo(mod_config, db_cursor, diff_entries):
 
                 existing_id = existing_entries_map.get(key)
 
-                # 报告跳过的条目数量
-                if skipped_count > 0:
-                    print(f"已跳过 {skipped_count} 个非字符串值的词条 (例如 JSON 文本组件)。")
-                
                 if existing_id:
                     # 准备更新数据: (origin, trans, id)
                     to_update.append((entry_data['origin_name'], entry_data['trans_name'], existing_id))
@@ -183,6 +179,9 @@ def process_repo(mod_config, db_cursor, diff_entries):
                     # 准备插入数据
                     to_insert.append(tuple(entry_data.values()))
 
+            # 报告跳过的条目数量
+            if skipped_count > 0:
+                print(f"已跳过 {skipped_count} 个非字符串值的词条 (例如 JSON 文本组件)。")
             # 3. 使用 executemany() 进行批量更新和插入
             if to_update:
                 db_cursor.executemany("UPDATE dict SET ORIGIN_NAME=?, TRANS_NAME=? WHERE ID=?", to_update)
