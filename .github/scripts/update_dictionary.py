@@ -149,6 +149,8 @@ def process_repo(mod_config, db_cursor, diff_entries):
             existing_entries_map = {row[0]: row[1] for row in db_cursor.fetchall()}
 
             # 2. 在内存中分类需要更新和需要插入的数据
+            to_update = []
+            to_insert = []
             skipped_count = 0 # 初始化计数器
 
             for key in common_keys:
