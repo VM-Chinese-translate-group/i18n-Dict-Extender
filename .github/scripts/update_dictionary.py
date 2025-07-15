@@ -143,25 +143,37 @@ def process_repo(mod_config, db_cursor, diff_entries):
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")
 
-            # --- START OF MINIMAL CHANGE ---
             # 1. 一次性查询出所有可能相关的现有条目
             db_cursor.execute("SELECT key, ID FROM dict WHERE modid=? AND version=? AND curseforge=?",
                               (mod_config['modid'], version, mod_config['curseforge']))
             existing_entries_map = {row[0]: row[1] for row in db_cursor.fetchall()}
 
             # 2. 在内存中分类需要更新和需要插入的数据
-            to_update = []
-            to_insert = []
+            skipped_count = 0 # 初始化计数器
 
             for key in common_keys:
+                origin_value = en_data[key]
+                trans_value = zh_data[key]
+
+                # 检查原文和译文的值是否都是字符串，如果不是，则跳过
+                if not isinstance(origin_value, str) or not isinstance(trans_value, str):
+                    skipped_count += 1
+                    continue
+
                 entry_data = {
-                    'origin_name': en_data[key], 'trans_name': zh_data[key],
+                    'origin_name': origin_value,
+                    'trans_name': trans_value,
                     'modid': mod_config['modid'], 'key': key,
                     'version': version, 'curseforge': mod_config['curseforge']
                 }
                 diff_entries.append(entry_data)
 
                 existing_id = existing_entries_map.get(key)
+
+                # 报告跳过的条目数量
+                if skipped_count > 0:
+                    print(f"已跳过 {skipped_count} 个非字符串值的词条 (例如 JSON 文本组件)。")
+                
                 if existing_id:
                     # 准备更新数据: (origin, trans, id)
                     to_update.append((entry_data['origin_name'], entry_data['trans_name'], existing_id))
@@ -178,7 +190,6 @@ def process_repo(mod_config, db_cursor, diff_entries):
                     to_insert)
 
             update_count, insert_count = len(to_update), len(to_insert)
-            # --- END OF MINIMAL CHANGE ---
 
             print(f"处理完成：{update_count} 个条目已更新，{insert_count} 个条目已插入。")
 
@@ -243,13 +254,11 @@ def regenerate_release_files():
         if entry['origin_name'] != entry['trans_name']:
             integral_mini_temp[entry['origin_name']].append(entry['trans_name'])
 
-    # --- START OF MINIMAL CHANGE ---
     # 使用 Counter 进行高效排序
     integral_mini_final = {
         origin_name: [item for item, count in Counter(trans_list).most_common()]
         for origin_name, trans_list in integral_mini_temp.items()
     }
-    # --- END OF MINIMAL CHANGE ---
 
     print('开始生成整合文件')
 
