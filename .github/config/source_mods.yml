@@ -85,7 +85,46 @@ mods:
     modid: "sophisticatedstorage"
     version: "1.21"
     curseforge: "sophisticated-storage"
-  
+    
+  - repo: "P3pp3rF1y/SophisticatedBackpacks"
+    lang_paths:
+      - "src/main/resources/assets/sophisticatedbackpacks/lang/"
+    modid: "sophisticatedbackpacks"
+    curseforge: "sophisticated-backpacks"
+      
+  - repo: "P3pp3rF1y/SophisticatedCore"
+    lang_paths:
+      - "src/main/resources/assets/sophisticatedcore/lang/"
+    modid: "sophisticatedcore"
+    curseforge: "sophisticated-core"
+      
+  - repo: "TeamTwilight/twilightforest"
+    lang_paths:
+      - "src/main/resources/assets/twilightforest/lang/"
+      - "src/generated/resources/assets/twilightforest/lang/"
+    modid: "twilightforest"
+    curseforge: "the-twilight-forest"
+
+  - repo: "Rearth/Oritech"
+    lang_paths:
+      - "common/src/main/resources/assets/oritech/lang/"
+    modid: "oritech"
+    curseforge: "oritech"
+          
+  - repo: "AztechMC/Modern-Industrialization"
+    lang_paths:
+      - "src/main/resources/assets/modern_industrialization/lang/"
+      - "src/generated/resources/assets/modern_industrialization/lang/"
+    modid: "modern_industrialization"
+    curseforge: "modern-industrialization"
+          
+  - repo: "BluSunrize/ImmersiveEngineering"
+    lang_paths:
+      - "src/main/resources/assets/immersiveengineering/lang/"
+      - "src/generated/resources/assets/immersiveengineering/lang/"
+    modid: "immersiveengineering"
+    curseforge: "immersive-engineering"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
