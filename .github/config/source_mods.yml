@@ -133,6 +133,40 @@ mods:
     # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
     curseforge: "cognition-mod"
 
+  - repo: "vectorwing/FarmersDelight"
+    branch: "1.21"
+    lang_paths:
+      - "src/main/resources/assets/farmersdelight/lang/"
+    modid: "farmersdelight"
+    # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
+    curseforge: "farmers-delight"
+  
+  - repo: "klikli-dev/occultism"
+    # branch 未填写，将自动获取默认分支
+    lang_paths:
+      - "src/generated/resources/assets/occultism/lang/"
+      - "src/main/resources/assets/occultism/lang/"
+    modid: "occultism"
+    # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
+    curseforge: "occultism"
+
+  - repo: "iron431/irons-spells-n-spellbooks"
+    # branch 未填写，将自动获取默认分支
+    lang_paths:
+      - "src/main/resources/assets/irons_spellbooks/lang"
+    modid: "irons_spellbooks"
+    # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
+    curseforge: "irons-spells-n-spellbooks"
+
+  - repo: "SammySemicolon/Malum-Mod"
+    # branch 未填写，将自动获取默认分支
+    lang_paths:
+      - "src/generated/resources/assets/malum/lang"
+      - "src/main/resources/assets/malum/lang/"
+    modid: "malum"
+    # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
+    curseforge: "malum"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
