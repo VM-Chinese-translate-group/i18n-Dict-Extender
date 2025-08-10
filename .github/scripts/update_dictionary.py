@@ -79,17 +79,47 @@ def parse_version_from_branch(branch_name):
     print(f"警告：无法从分支名 '{branch_name}' 中解析版本号。")
     return "unknown"
 
+
+def parse_lang_file(f):
+    """解析 .lang 文件流，返回一个字典。忽略注释和空行。"""
+    data = {}
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if '=' in line:
+            key, value = line.split('=', 1)
+            data[key.strip()] = value.strip()
+    return data
+
+
 def process_repo(mod_config, db_cursor, diff_entries):
     """处理单个模组仓库，提取翻译并更新数据库。"""
     repo_slug = mod_config['repo']
     print(f"\n--- 开始处理模组: {repo_slug} ---")
 
     branch_name_for_summary = "N/A"
+    update_count, insert_count = 0, 0  # 在开头初始化
 
     try:
         branch = mod_config.get('branch') or get_repo_default_branch(repo_slug)
         branch_name_for_summary = branch # 保存分支名用于摘要
         version = mod_config.get('version') or parse_version_from_branch(branch)
+
+        # 根据版本决定文件格式和加载函数
+        major_str, minor_str, *_ = (version + '.0.0').split('.')
+        use_json = int(major_str) > 1 or (int(major_str) == 1 and int(minor_str) >= 13)
+
+        if use_json:
+            print(f"版本 {version} >= 1.13，将读取 .json 文件。")
+            en_filename = "en_us.json"
+            zh_filename = "zh_cn.json"
+            load_func = json.load
+        else:
+            print(f"版本 {version} <= 1.12，将读取 .lang 文件。")
+            en_filename = "en_us.lang"
+            zh_filename = "zh_cn.lang"
+            load_func = parse_lang_file
 
         zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
         print(f"正在从 {zip_url} 下载仓库...")
@@ -119,26 +149,28 @@ def process_repo(mod_config, db_cursor, diff_entries):
             if merge_mode:
                 print("模式：合并多个语言文件。")
                 for relative_path in lang_paths_config:
-                    if (en_json_path := repo_root_dir / relative_path / "en_us.json").exists():
-                        with open(en_json_path, 'r', encoding='utf-8') as f: en_data.update(json.load(f))
-                    if (zh_json_path := repo_root_dir / relative_path / "zh_cn.json").exists():
-                        with open(zh_json_path, 'r', encoding='utf-8') as f: zh_data.update(json.load(f))
+                    if (en_file_path := repo_root_dir / relative_path / en_filename).exists():
+                        with open(en_file_path, 'r', encoding='utf-8') as f: en_data.update(load_func(f))
+                    if (zh_file_path := repo_root_dir / relative_path / zh_filename).exists():
+                        with open(zh_file_path, 'r', encoding='utf-8') as f: zh_data.update(load_func(f))
                 if not en_data or not zh_data:
-                    raise FileNotFoundError("合并模式下，未能找到 en_us.json 或 zh_cn.json 文件。")
+                    raise FileNotFoundError(f"合并模式下，未能找到 {en_filename} 或 {zh_filename} 文件。")
 
             else:
                 print("模式：按优先级查找单个语言文件。")
                 en_path, zh_path = None, None
                 for p in lang_paths_config:
-                    if not en_path and (p_en := repo_root_dir / p / "en_us.json").exists(): en_path = p_en
-                    if not zh_path and (p_zh := repo_root_dir / p / "zh_cn.json").exists(): zh_path = p_zh
+                    if not en_path and (p_en := repo_root_dir / p / en_filename).exists(): en_path = p_en
+                    if not zh_path and (p_zh := repo_root_dir / p / zh_filename).exists(): zh_path = p_zh
                     if en_path and zh_path: break
-                
+
                 if not en_path or not zh_path:
-                    raise FileNotFoundError(f"未能找到 en_us.json 或 zh_cn.json。")
-                
-                with open(en_path, 'r', encoding='utf-8') as f: en_data = json.load(f)
-                with open(zh_path, 'r', encoding='utf-8') as f: zh_data = json.load(f)
+                    raise FileNotFoundError(f"未能找到 {en_filename} 或 {zh_filename}。")
+
+                with open(en_path, 'r', encoding='utf-8') as f:
+                    en_data = load_func(f)
+                with open(zh_path, 'r', encoding='utf-8') as f:
+                    zh_data = load_func(f)
 
             common_keys = en_data.keys() & zh_data.keys()
             print(f"找到 {len(common_keys)} 个共同的翻译键。")

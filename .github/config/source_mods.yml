@@ -170,9 +170,8 @@ mods:
   - repo: "Azanor/thaumcraft-beta"
     # branch 未填写，将自动获取默认分支
     lang_paths:
-      - "/"
+      - "."
     modid: "thaumcraft"
-    # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
     version: "1.12" 
     curseforge: "thaumcraft"
 
