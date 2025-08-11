@@ -80,6 +80,17 @@ def parse_version_from_branch(branch_name):
     return "unknown"
 
 
+def find_file_case_insensitive(directory, filename):
+    """在目录中不区分大小写地查找文件。"""
+    if not directory.is_dir():
+        return None
+    filename_lower = filename.lower()
+    for item in directory.iterdir():
+        if item.is_file() and item.name.lower() == filename_lower:
+            return item
+    return None
+
+
 def parse_lang_file(f):
     """解析 .lang 文件流，返回一个字典。忽略注释和空行。"""
     data = {}
@@ -149,9 +160,10 @@ def process_repo(mod_config, db_cursor, diff_entries):
             if merge_mode:
                 print("模式：合并多个语言文件。")
                 for relative_path in lang_paths_config:
-                    if (en_file_path := repo_root_dir / relative_path / en_filename).exists():
+                    lang_dir = repo_root_dir / relative_path
+                    if en_file_path := find_file_case_insensitive(lang_dir, en_filename):
                         with open(en_file_path, 'r', encoding='utf-8') as f: en_data.update(load_func(f))
-                    if (zh_file_path := repo_root_dir / relative_path / zh_filename).exists():
+                    if zh_file_path := find_file_case_insensitive(lang_dir, zh_filename):
                         with open(zh_file_path, 'r', encoding='utf-8') as f: zh_data.update(load_func(f))
                 if not en_data or not zh_data:
                     raise FileNotFoundError(f"合并模式下，未能找到 {en_filename} 或 {zh_filename} 文件。")
@@ -160,8 +172,11 @@ def process_repo(mod_config, db_cursor, diff_entries):
                 print("模式：按优先级查找单个语言文件。")
                 en_path, zh_path = None, None
                 for p in lang_paths_config:
-                    if not en_path and (p_en := repo_root_dir / p / en_filename).exists(): en_path = p_en
-                    if not zh_path and (p_zh := repo_root_dir / p / zh_filename).exists(): zh_path = p_zh
+                    lang_dir = repo_root_dir / p
+                    if not en_path:
+                        en_path = find_file_case_insensitive(lang_dir, en_filename)
+                    if not zh_path:
+                        zh_path = find_file_case_insensitive(lang_dir, zh_filename)
                     if en_path and zh_path: break
 
                 if not en_path or not zh_path:
