@@ -28,7 +28,7 @@
 
 ## 📦 Release 文件介绍
 
-本仓库的 [Release 页面](https://github.com/YOUR_USERNAME/YOUR_REPO/releases) 页面会每周放出以下文件：
+本仓库的 [Release 页面](https://github.com/VM-Chinese-translate-group/i18n-Dict-Extender/releases) 页面会每周放出以下文件：
 
 - `Dict.json`
 - `Dict-Mini.json`
