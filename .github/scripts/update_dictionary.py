@@ -1,14 +1,17 @@
+import asyncio
 import os
-import sys
-import requests
-import yaml
-import sqlite3
 import re
+import sqlite3
+import sys
 import tempfile
 import zipfile
+from collections import Counter, defaultdict
 from pathlib import Path
-from collections import defaultdict, Counter
-import json
+
+import aiohttp
+import ujson as json
+import requests
+import yaml
 
 # --- 配置常量 ---
 CONFIG_FILE = Path(__file__).parent.parent / "config/source_mods.yml"
@@ -104,7 +107,19 @@ def parse_lang_file(f):
     return data
 
 
-def process_repo(mod_config, db_cursor, diff_entries):
+async def download_repo_zip(session, repo_slug, branch, tmp_path):
+    zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
+    print(f"正在下载仓库: {repo_slug} (分支: {branch})")
+    zip_path = tmp_path / "repo.zip"
+    
+    async with session.get(zip_url, headers=HEADERS) as response:
+        response.raise_for_status()
+        content = await response.read()
+        zip_path.write_bytes(content)
+        
+    return zip_path
+
+async def process_repo(session, mod_config, db_cursor, diff_entries):
     """处理单个模组仓库，提取翻译并更新数据库。"""
     repo_slug = mod_config['repo']
     print(f"\n--- 开始处理模组: {repo_slug} ---")
@@ -131,16 +146,10 @@ def process_repo(mod_config, db_cursor, diff_entries):
             en_filename = "en_us.lang"
             zh_filename = "zh_cn.lang"
             load_func = parse_lang_file
-
-        zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
-        print(f"正在从 {zip_url} 下载仓库...")
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            zip_path = tmp_path / "repo.zip"
-            with requests.get(zip_url, headers=HEADERS, stream=True) as r:
-                r.raise_for_status()
-                with open(zip_path, 'wb') as f: f.write(r.content)
+            zip_path = await download_repo_zip(session, repo_slug, branch, tmp_path)
             
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(tmp_path)
@@ -349,7 +358,7 @@ def generate_release_body(summaries, diff_count):
     body.append("\n`diff.json` 文件包含了本次运行所有新增和更新的条目详情。")
     return "\n".join(body)
 
-def main():
+async def main():
     if not get_latest_release_db():
         conn = sqlite3.connect(DB_FILENAME)
         initialize_db(conn)
@@ -363,13 +372,14 @@ def main():
 
     with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    
-    for mod_config in config.get('mods', []):
-        # 传入 diff_entries 列表以收集变动
-        summary = process_repo(mod_config, cursor, diff_entries)
-        if summary:
-            run_summaries.append(summary)
-            
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            process_repo(session, mod_config, cursor, diff_entries)
+            for mod_config in config.get('mods', [])
+        ]
+        run_summaries = await asyncio.gather(*tasks)
+
     conn.commit()
     conn.close()
 
@@ -391,4 +401,4 @@ def main():
     print(f"\n所有任务完成！将在仓库 {GITHUB_REPO} 上创建 Release。")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

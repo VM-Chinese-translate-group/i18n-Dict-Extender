@@ -1,0 +1,4 @@
+aiohttp
+orjson
+pyyaml
+requests

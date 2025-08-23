@@ -1,13 +1,13 @@
 name: Update and Release Dictionary
 
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
   schedule:
     # 每周五 UTC 时间 10:00 执行 (北京时间 18:00)
     - cron: '0 10 * * 5'
 
 permissions:
-  contents: write # 需要写权限来创建 Release
+  contents: write
 
 jobs:
   build-and-release:
@@ -19,16 +19,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3'
 
       - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-cache
-  
+          key: ${{ runner.os }}-pip-${{ hashFiles('.github/scripts/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Python dependencies
-        run: pip install requests pyyaml
+        run: pip install -r .github/scripts/requirements.txt
 
       - name: Run update script
         run: python .github/scripts/update_dictionary.py
