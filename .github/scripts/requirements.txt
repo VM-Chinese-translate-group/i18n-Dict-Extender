@@ -1,4 +1,4 @@
 aiohttp
-orjson
+ujson
 pyyaml
 requests
