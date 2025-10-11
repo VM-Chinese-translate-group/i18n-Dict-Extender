@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build-and-release:
@@ -55,3 +56,26 @@ jobs:
             Dict-Mini.json
             Dict-Sqlite.db
             diff.json
+
+      - name: Create Issue on Failure
+        # 条件判断：只有当 update_script 步骤的输出 update_failed 为 'true' 时才执行
+        if: steps.update_script.outputs.update_failed == 'true'
+        run: |
+          gh issue create \
+            --title "词典自动更新失败: $(date -u +'%Y-%m-%d')" \
+            --body "你好，
+            
+            在仓库 **${{ github.repository }}** 中执行的 “Update and Release Dictionary” 工作流检测到部分词典源更新失败。
+
+            失败详情已记录在最新的 Release 正文中，请点击下方链接查看：
+            **${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}**
+
+            你也可以直接查看本次工作流的运行日志来定位问题：
+            **${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}**
+
+            请及时检查失败原因并处理此 Issue。
+            " \
+            --label "bug,automation" \
+            --assignee "maxinglo"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

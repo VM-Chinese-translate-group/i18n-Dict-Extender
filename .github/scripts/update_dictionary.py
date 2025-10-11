@@ -397,6 +397,12 @@ async def main():
     release_body_content = generate_release_body(run_summaries, len(diff_entries))
     Path(RELEASE_BODY_FILENAME).write_text(release_body_content, encoding='utf-8')
     print(f"{RELEASE_BODY_FILENAME} 生成完毕。")
+
+    any_failures = any(s.get('error') for s in run_summaries)
+    if 'GITHUB_OUTPUT' in os.environ:
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            print(f"update_failed={str(any_failures).lower()}", file=f)
+        print(f"检测到更新失败状态: {any_failures}，已设置 Action 输出。")
     
     print(f"\n所有任务完成！将在仓库 {GITHUB_REPO} 上创建 Release。")
 
