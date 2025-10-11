@@ -22,6 +22,7 @@ mods:
     curseforge: "dungeons-delight"
 
   - repo: "Team-EnderIO/EnderIO"
+    branch: "l10n_dev/1.21.1"
     # 合并所有路径下的文件
     merge_paths: true
     # 列出所有包含语言文件的子模块路径
@@ -183,3 +184,4 @@ mods:
   #   modid: "somecoolmod"
   #   # version 未填写，将自动从分支名提取，例如 '1.19.x' -> '1.19'
   #   curseforge: "some-cool-mod"
+
