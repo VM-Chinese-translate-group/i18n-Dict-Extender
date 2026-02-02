@@ -22,7 +22,7 @@ mods:
     curseforge: "dungeons-delight"
 
   - repo: "Team-EnderIO/EnderIO"
-    branch: "l10n_dev/1.21.1"
+    branch: "1.21.1"
     # 合并所有路径下的文件
     merge_paths: true
     # 列出所有包含语言文件的子模块路径
@@ -176,6 +176,14 @@ mods:
     version: "1.12" 
     curseforge: "thaumcraft"
 
+  - repo: "cable-mc/cobblemon"
+    repo_provider: "gitlab"
+    branch: "main"
+    lang_paths:
+      - "common/src/main/resources/assets/cobblemon/lang/"
+    version: "1.21" 
+    modid: "cobblemon"
+    curseforge: "cobblemon"
 
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
