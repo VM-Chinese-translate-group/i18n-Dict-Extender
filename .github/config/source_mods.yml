@@ -176,6 +176,14 @@ mods:
     version: "1.12" 
     curseforge: "thaumcraft"
 
+  - repo: "cable-mc/cobblemon"
+    # 指定仓库提供方（默认 github）
+    repo_provider: "gitlab"
+    branch: "main"
+    lang_paths:
+      - "common/src/main/resources/assets/cobblemon/lang/"
+    modid: "cobblemon"
+    curseforge: "cobblemon"
 
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
