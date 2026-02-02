@@ -24,19 +24,10 @@ mods:
   - repo: "Team-EnderIO/EnderIO"
     branch: "1.21.1"
     # 合并所有路径下的文件
-    merge_paths: true
     # 列出所有包含语言文件的子模块路径
     lang_paths:
-      - "enderio-base/src/main/resources/assets/enderio/lang/"
-      - "enderio-base/src/generated/resources/assets/enderio/lang/"
-      - "enderio-armory/src/main/resources/assets/enderio/lang/"
-      - "enderio-armory/src/generated/resources/assets/enderio/lang/"
-      - "enderio-conduits/src/main/resources/assets/enderio/lang/"
-      - "enderio-conduits/src/generated/resources/assets/enderio/lang/"
-      - "enderio-machines/src/main/resources/assets/enderio/lang/"
-      - "enderio-machines/src/generated/resources/assets/enderio/lang/"
-      - "enderio-conduits-modded/src/main/resources/assets/enderio/lang/"
-      - "enderio-conduits-modded/src/generated/resources/assets/enderio/lang/"
+      - "enderio/src/generated/resources/assets/enderio/lang"
+      - "enderio/src/main/resources/assets/enderio/lang"
     modid: "enderio"
     curseforge: "ender-io"
 
