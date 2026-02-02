@@ -25,6 +25,7 @@ SOURCE_DB_REPO = "CFPATools/i18n-dict"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPOSITORY")
+GITLAB_TOKEN = os.getenv("GITLAB_TOKEN")
 
 if not GITHUB_TOKEN or not GITHUB_REPO:
     print("错误：环境变量 GITHUB_TOKEN 和 GITHUB_REPOSITORY 未设置。")
@@ -64,9 +65,29 @@ def get_latest_release_db():
     print(f"{DB_FILENAME} 下载完成。")
     return True
 
-def get_repo_default_branch(repo_slug):
+def get_repo_provider(mod_config):
+    return (mod_config.get('repo_provider') or 'github').lower()
+
+
+def get_gitlab_headers():
+    if not GITLAB_TOKEN:
+        return {}
+    return {"PRIVATE-TOKEN": GITLAB_TOKEN}
+
+
+def get_repo_default_branch(repo_slug, mod_config):
     """获取指定仓库的默认分支名。"""
+    provider = get_repo_provider(mod_config)
     print(f"正在获取仓库 {repo_slug} 的默认分支...")
+
+    if provider == 'gitlab':
+        gitlab_host = (mod_config.get('repo_host') or 'https://gitlab.com').rstrip('/')
+        project_path = requests.utils.quote(repo_slug, safe='')
+        repo_info_url = f"{gitlab_host}/api/v4/projects/{project_path}"
+        response = requests.get(repo_info_url, headers=get_gitlab_headers())
+        response.raise_for_status()
+        return response.json()['default_branch']
+
     repo_info_url = f"https://api.github.com/repos/{repo_slug}"
     response = requests.get(repo_info_url, headers=HEADERS)
     response.raise_for_status()
@@ -107,12 +128,21 @@ def parse_lang_file(f):
     return data
 
 
-async def download_repo_zip(session, repo_slug, branch, tmp_path):
-    zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
+async def download_repo_zip(session, repo_slug, branch, tmp_path, mod_config):
+    provider = get_repo_provider(mod_config)
     print(f"正在下载仓库: {repo_slug} (分支: {branch})")
     zip_path = tmp_path / "repo.zip"
+
+    if provider == 'gitlab':
+        gitlab_host = (mod_config.get('repo_host') or 'https://gitlab.com').rstrip('/')
+        project_path = requests.utils.quote(repo_slug, safe='')
+        zip_url = f"{gitlab_host}/api/v4/projects/{project_path}/repository/archive.zip?sha={branch}"
+        headers = get_gitlab_headers()
+    else:
+        zip_url = f"https://api.github.com/repos/{repo_slug}/zipball/{branch}"
+        headers = HEADERS
     
-    async with session.get(zip_url, headers=HEADERS) as response:
+    async with session.get(zip_url, headers=headers) as response:
         response.raise_for_status()
         content = await response.read()
         zip_path.write_bytes(content)
@@ -128,7 +158,7 @@ async def process_repo(session, mod_config, db_cursor, diff_entries):
     update_count, insert_count = 0, 0  # 在开头初始化
 
     try:
-        branch = mod_config.get('branch') or get_repo_default_branch(repo_slug)
+        branch = mod_config.get('branch') or get_repo_default_branch(repo_slug, mod_config)
         branch_name_for_summary = branch # 保存分支名用于摘要
         version = mod_config.get('version') or parse_version_from_branch(branch)
 
@@ -149,7 +179,7 @@ async def process_repo(session, mod_config, db_cursor, diff_entries):
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            zip_path = await download_repo_zip(session, repo_slug, branch, tmp_path)
+            zip_path = await download_repo_zip(session, repo_slug, branch, tmp_path, mod_config)
             
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(tmp_path)

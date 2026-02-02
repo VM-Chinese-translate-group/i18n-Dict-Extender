@@ -102,6 +102,20 @@ mods:
     # version: "1.20" 
     # 模组的 CurseForge ID
     curseforge: "create"
+
+  - # --- GitLab 仓库的配置示例 ---
+    # 目标模组的 GitLab 项目路径 (格式：group/subgroup/project)
+    repo: "example-group/subgroup/example-mod"
+    # 指定仓库提供方（默认 github）
+    repo_provider: "gitlab"
+    # （可选）自托管 GitLab 的地址，不填则默认 https://gitlab.com
+    # repo_host: "https://gitlab.example.com"
+    # （可选）需要拉取的分支，不填则使用仓库的默认分支
+    # branch: "main"
+    lang_paths:
+      - "src/main/resources/assets/example/lang/"
+    modid: "example"
+    curseforge: "example-mod"
 ```
 #### 合并模式
 
@@ -120,6 +134,14 @@ mods:
     modid: "enderio"
     curseforge: "ender-io"
 ```
+
+  ### GitLab 访问说明
+
+  如需拉取 GitLab 仓库，请在对应模组配置中设置 `repo_provider: "gitlab"`。
+
+  - 公共仓库无需额外配置。
+  - 私有仓库需要设置环境变量 `GITLAB_TOKEN`（Personal Access Token）。
+  - 自托管 GitLab 可通过 `repo_host` 指定域名。
 
 ## 📜 版权归属
 
