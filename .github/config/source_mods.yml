@@ -176,6 +176,50 @@ mods:
     modid: "cobblemon"
     curseforge: "cobblemon"
 
+  - repo: "InventivetalentDev/minecraft-assets"
+    branch: "1.7.10"
+    lang_paths:
+      - "assets/minecraft/lang"
+    modid: "minecraft"
+    version: "1.7"
+    curseforge: "minecraft"
+
+  - repo: "InventivetalentDev/minecraft-assets"
+    branch: "1.12.2"
+    lang_paths:
+      - "assets/minecraft/lang"
+    modid: "minecraft"
+    version: "1.12"
+    curseforge: "minecraft"
+
+  - repo: "InventivetalentDev/minecraft-assets"
+    branch: "1.16.5"
+    lang_paths:
+      - "assets/minecraft/lang"
+    modid: "minecraft"
+    curseforge: "minecraft"
+
+  - repo: "InventivetalentDev/minecraft-assets"
+    branch: "1.18.2"
+    lang_paths:
+      - "assets/minecraft/lang"
+    modid: "minecraft"
+    curseforge: "minecraft"
+
+  - repo: "InventivetalentDev/minecraft-assets"
+    branch: "1.20.1"
+    lang_paths:
+      - "assets/minecraft/lang"
+    modid: "minecraft"
+    curseforge: "minecraft"
+    
+  - repo: "InventivetalentDev/minecraft-assets"
+    branch: "1.21"
+    lang_paths:
+      - "assets/minecraft/lang"
+    modid: "minecraft"
+    curseforge: "minecraft"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
