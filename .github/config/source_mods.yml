@@ -176,7 +176,7 @@ mods:
     modid: "cobblemon"
     curseforge: "cobblemon"
 
-- repo: "InventivetalentDev/minecraft-assets"
+  - repo: "InventivetalentDev/minecraft-assets"
     branches:
       - "1.7.10"
       - "1.12.2"
