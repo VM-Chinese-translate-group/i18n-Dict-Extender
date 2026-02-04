@@ -127,10 +127,71 @@ def parse_lang_file(f):
             data[key.strip()] = value.strip()
     return data
 
+async def download_raw_files(session, repo_slug, branch, root_path, mod_config, en_file, zh_file):
+    """直接通过 Raw URL 下载指定文件，跳过 Zip 打包。适配 Github 和 Gitlab"""
+    provider = get_repo_provider(mod_config)
+    
+    if provider == 'gitlab':
+        gitlab_host = (mod_config.get('repo_host') or 'https://gitlab.com').rstrip('/')
+        project_path = requests.utils.quote(repo_slug, safe='')
+        # GitLab Raw API: /projects/:id/repository/files/:file_path/raw?ref=:branch
+        base_api = f"{gitlab_host}/api/v4/projects/{project_path}/repository/files"
+        headers = get_gitlab_headers()
+    else:
+        # GitHub Raw
+        base_url = f"https://raw.githubusercontent.com/{repo_slug}/{branch}"
+        headers = HEADERS
+
+    paths = mod_config.get('lang_paths', [])
+    
+    # 定义文件名变体，用于处理旧版本 Minecraft 的大小写问题 (如 en_US.lang)
+    file_variations = {
+        'en_us.lang': ['en_us.lang', 'en_US.lang'],
+        'zh_cn.lang': ['zh_cn.lang', 'zh_CN.lang', 'zh_CN.txt'], # 部分旧版本可能是 txt
+    }
+
+    downloaded_count = 0
+
+    for relative_dir in paths:
+        target_dir = root_path / relative_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+        for target_file in [en_file, zh_file]:
+            # 如果是 .lang 文件，尝试多种大小写组合；否则只尝试原名
+            candidates = file_variations.get(target_file, [target_file])
+            
+            found = False
+            for fname in candidates:
+                if provider == 'gitlab':
+                    full_path = f"{relative_dir.strip('/')}/{fname}"
+                    enc_path = requests.utils.quote(full_path, safe='')
+                    url = f"{base_api}/{enc_path}/raw?ref={branch}"
+                else:
+                    url = f"{base_url.rstrip('/')}/{relative_dir.strip('/')}/{fname}"
+
+                try:
+                    async with session.get(url, headers=headers) as resp:
+                        if resp.status == 200:
+                            content = await resp.read()
+                            # 统一保存为脚本后续期望的小写文件名
+                            (target_dir / target_file).write_bytes(content)
+                            found = True
+                            downloaded_count += 1
+                            break
+                except Exception as e:
+                    print(f"  [Raw下载] 异常: {e}")
+
+            if not found:
+                # 仅在找不到时打印警告
+                pass
+    
+    if downloaded_count == 0:
+        raise FileNotFoundError("未能通过 Raw 模式下载任何语言文件。")
+
 
 async def download_repo_zip(session, repo_slug, branch, tmp_path, mod_config):
     provider = get_repo_provider(mod_config)
-    print(f"正在下载仓库: {repo_slug} (分支: {branch})")
+    print(f"正在下载仓库 Zip: {repo_slug} (分支: {branch})")
     zip_path = tmp_path / "repo.zip"
 
     if provider == 'gitlab':
@@ -162,36 +223,39 @@ async def process_repo(session, mod_config, db_cursor, diff_entries):
         branch_name_for_summary = branch # 保存分支名用于摘要
         version = mod_config.get('version') or parse_version_from_branch(branch)
 
-        # 根据版本决定文件格式和加载函数
+        print(f"\n--- 处理模组: {repo_slug} | 分支: {branch} | 版本: {version} ---")
+
         major_str, minor_str, *_ = (version + '.0.0').split('.')
+        # 1.13+ 使用 json, 之前使用 lang
         use_json = int(major_str) > 1 or (int(major_str) == 1 and int(minor_str) >= 13)
 
         if use_json:
-            print(f"版本 {version} >= 1.13，将读取 .json 文件。")
             en_filename = "en_us.json"
             zh_filename = "zh_cn.json"
             load_func = json.load
         else:
-            print(f"版本 {version} <= 1.12，将读取 .lang 文件。")
             en_filename = "en_us.lang"
             zh_filename = "zh_cn.lang"
             load_func = parse_lang_file
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            zip_path = await download_repo_zip(session, repo_slug, branch, tmp_path, mod_config)
             
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(tmp_path)
-            
-            repo_root_dir = next(d for d in tmp_path.iterdir() if d.is_dir())
-            print(f"找到解压后的仓库根目录: {repo_root_dir.name}")
+            if mod_config.get('download_mode') == 'raw':
+                print(f"模式：Raw 文件下载 (跳过 ZIP)")
+                await download_raw_files(session, repo_slug, branch, tmp_path, mod_config, en_filename, zh_filename)
+                repo_root_dir = tmp_path # raw模式下，tmp_path 就是根目录
+            else:
+                zip_path = await download_repo_zip(session, repo_slug, branch, tmp_path, mod_config)
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(tmp_path)
+                repo_root_dir = next(d for d in tmp_path.iterdir() if d.is_dir())
             
             lang_paths_config = mod_config.get('lang_paths', [])
             if not lang_paths_config and mod_config.get('lang_path'):
                 lang_paths_config = [mod_config.get('lang_path')]
             if not lang_paths_config:
-                raise ValueError(f"仓库 {repo_slug} 的配置中缺少 'lang_paths'。")
+                raise ValueError(f"缺少 'lang_paths' 配置。")
 
             en_data, zh_data = {}, {}
             merge_mode = mod_config.get('merge_paths', False)
@@ -219,15 +283,17 @@ async def process_repo(session, mod_config, db_cursor, diff_entries):
                     if en_path and zh_path: break
 
                 if not en_path or not zh_path:
-                    raise FileNotFoundError(f"未能找到 {en_filename} 或 {zh_filename}。")
+                     # raw模式如果失败前面会抛出异常，这里再次确认
+                     if not en_data and not zh_data:
+                        raise FileNotFoundError(f"未在指定路径找到 {en_filename} 或 {zh_filename}。")
 
-                with open(en_path, 'r', encoding='utf-8') as f:
-                    en_data = load_func(f)
-                with open(zh_path, 'r', encoding='utf-8') as f:
-                    zh_data = load_func(f)
+                if en_path:
+                    with open(en_path, 'r', encoding='utf-8') as f: en_data = load_func(f)
+                if zh_path:
+                    with open(zh_path, 'r', encoding='utf-8') as f: zh_data = load_func(f)
 
             common_keys = en_data.keys() & zh_data.keys()
-            print(f"找到 {len(common_keys)} 个共同的翻译键。")
+            print(f"合并统计: 找到 {len(common_keys)} 个有效对译。")
 
             # 1. 一次性查询出所有可能相关的现有条目
             db_cursor.execute("SELECT key, ID FROM dict WHERE modid=? AND version=? AND curseforge=?",
@@ -277,8 +343,7 @@ async def process_repo(session, mod_config, db_cursor, diff_entries):
                     to_insert)
 
             update_count, insert_count = len(to_update), len(to_insert)
-
-            print(f"处理完成：{update_count} 个条目已更新，{insert_count} 个条目已插入。")
+            print(f"完成: 更新 {update_count} / 新增 {insert_count}")
 
     except Exception as e:
         print(f"处理仓库 {repo_slug} 时发生错误: {e}")
@@ -334,7 +399,7 @@ def regenerate_release_files():
     integral = []
     integral_mini_temp = defaultdict(list)
 
-    print(f'处理从数据库读取的 {len(all_db_entries)} 个词条中...')
+    print(f'处理 {len(all_db_entries)} 个词条中...')
     for entry in all_db_entries:
         if len(entry['origin_name']) > 50 or entry['origin_name'] == '': continue
         integral.append(entry)
@@ -404,10 +469,24 @@ async def main():
         config = yaml.safe_load(f)
 
     async with aiohttp.ClientSession() as session:
-        tasks = [
-            process_repo(session, mod_config, cursor, diff_entries)
-            for mod_config in config.get('mods', [])
-        ]
+        tasks = []
+        for mod_config in config.get('mods', []):
+            # --- 新增功能：支持 branches 列表配置 ---
+            if 'branches' in mod_config and isinstance(mod_config['branches'], list):
+                branches = mod_config['branches']
+                for branch in branches:
+                    # 创建副本以避免配置污染
+                    sub_config = mod_config.copy()
+                    sub_config['branch'] = branch
+                    # 移除列表键，清理配置
+                    del sub_config['branches']
+                    # 注意：如果 root 配置中强行指定了 version，会覆盖自动推断。
+                    # 通常在使用 branches 列表时不应在 root 指定 version。
+                    tasks.append(process_repo(session, sub_config, cursor, diff_entries))
+            else:
+                # 原有的单分支模式
+                tasks.append(process_repo(session, mod_config, cursor, diff_entries))
+        
         run_summaries = await asyncio.gather(*tasks)
 
     conn.commit()
