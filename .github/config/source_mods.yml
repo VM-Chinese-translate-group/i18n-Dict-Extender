@@ -189,6 +189,16 @@ mods:
     modid: "minecraft"
     curseforge: "minecraft"
 
+  - repo: "Minecraft-LightLand/Ars-Nouveau-Flavors-Delight"
+    branches:
+      - "1.20.1"
+      - "1.21.1"
+    lang_paths:
+      - "src/generated/resources/assets/arsdelight/lang"
+      - "src/main/resources/assets/arsdelight/lang"
+    modid: "arsdelight"
+    curseforge: "ars-nouveaus-flavors-delight"
+
   # - repo: "some-developer/some-cool-mod"
   #   # branch 未填写，将自动获取默认分支
   #   lang_paths:
