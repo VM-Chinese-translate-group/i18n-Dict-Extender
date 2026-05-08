@@ -145,8 +145,10 @@ mods:
 
 ## 📜 版权归属
 
-本项目的数据基础源自 CFPA [Minecraft 模组简体中文翻译项目](https://github.com/CFPAOrg/Minecraft-Mod-Language-Package) 及其演绎项目 [i18n-dict](https://github.com/CFPATools/i18n-dict)。
+本项目的数据基础源自 CFPA [Minecraft 模组简体中文翻译项目](https://github.com/CFPAOrg/Minecraft-Mod-Language-Package) 及其衍生项目 [i18n-dict](https://github.com/CFPATools/i18n-dict)。
 
-因此，由本项目生成的词典数据（`Dict.json`, `Dict-Mini.json`, `Dict-Sqlite.db`, `diff.json`）同样遵循原项目的 [**CC BY-NC-SA 4.0**](https://creativecommons.org/licenses/by-nc-sa/4.0/) 授权。
+各部分内容的授权与归属如下：
 
-本项目的自动化脚本及工作流代码采用 [**MIT LICENSE**](https://mit-license.org/) 进行许可。
+* **社区翻译内容**：最终生成的词典数据（`Dict.json` 等）遵循 [**CC BY-NC-SA 4.0**](https://creativecommons.org/licenses/by-nc-sa/4.0/) 授权。
+* **官方游戏资产**：词典中包含的 Minecraft 原版语言文本及 Translation Keys 版权归属 **Mojang Studios**。本项目的 CC 授权不涵盖此类官方资产，相关提取与使用须遵守 [Minecraft EULA](https://www.minecraft.net/eula)。
+* **代码及工作流**：本仓库内的自动化脚本采用 [**MIT LICENSE**](https://mit-license.org/)。
