@@ -94,12 +94,13 @@ mods:
     lang_paths:
       - "src/main/resources/assets/twilightforest/lang/"
       - "src/generated/resources/assets/twilightforest/lang/"
+    version: "26.1"
     modid: "twilightforest"
     curseforge: "the-twilight-forest"
 
   - repo: "Rearth/Oritech"
     lang_paths:
-      - "common/src/main/resources/assets/oritech/lang/"
+      - "src/main/resources/assets/oritech/lang/"
     modid: "oritech"
     curseforge: "oritech"
           
@@ -202,6 +203,7 @@ mods:
     lang_paths:
       - "aeronautics/common/src/main/resources/assets/aeronautics/lang/"
       - "aeronautics/common/src/generated/resources/assets/aeronautics/lang/"
+    version: "1.21.1"
     modid: "aeronautics"
     curseforge: "create-aeronautics"
 
